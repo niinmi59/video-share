@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ATER Video Compressor</title>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <style>
+        body { background: #121212; color: #e0e0e0; font-family: sans-serif; text-align: center; padding: 50px; }
+        .container { max-width: 600px; margin: auto; border: 1px solid #333; padding: 20px; border-radius: 10px; }
+        input { margin: 20px 0; }
+        #status { color: #ffca28; margin: 10px 0; }
+        video { width: 100%; margin-top: 20px; display: none; border: 1px solid #444; }
+        .download-btn { display: none; background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Video Uploader & Compressor</h1>
+    <p>100MBを超える動画は自動で圧縮されます</p>
+    
+    <input type="file" id="uploader" accept="video/*">
+    <div id="status"></div>
+    
+    <video id="output-video" controls></video>
+    <br>
+    <a id="download-link" class="download-btn">圧縮した動画を保存</a>
+</div>
+
+<script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+
+    const uploader = document.getElementById('uploader');
+    const status = document.getElementById('status');
+    const videoTag = document.getElementById('output-video');
+    const downloadLink = document.getElementById('download-link');
+
+    uploader.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        status.innerText = "読み込み中...";
+
+        // 100MB (100 * 1024 * 1024 bytes)
+        const MAX_SIZE = 100 * 1024 * 1024;
+
+        if (file.size > MAX_SIZE) {
+            status.innerText = "サイズが大きいため圧縮を開始します（数分かかる場合があります）...";
+            
+            if (!ffmpeg.isLoaded()) await ffmpeg.load();
+            
+            ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
+
+            // ビットレートを計算して100MBに収める（簡易計算：約800k〜1500k推奨）
+            // ここでは100MBに収めるために、ターゲットビットレートを制限して変換します
+            await ffmpeg.run('-i', 'input.mp4', '-vcodec', 'libx264', '-crf', '28', '-fs', '95M', 'output.mp4');
+
+            const data = ffmpeg.FS('readFile', 'output.mp4');
+            const resultUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+            
+            videoTag.src = resultUrl;
+            downloadLink.href = resultUrl;
+            downloadLink.download = "compressed_video.mp4";
+        } else {
+            status.innerText = "サイズ制限内です。そのまま表示します。";
+            const normalUrl = URL.createObjectURL(file);
+            videoTag.src = normalUrl;
+            downloadLink.href = normalUrl;
+            downloadLink.download = file.name;
+        }
+
+        videoTag.style.display = "block";
+        downloadLink.style.display = "inline-block";
+        status.innerText = "完了！";
+    });
+</script>
+
+</body>
+</html>
